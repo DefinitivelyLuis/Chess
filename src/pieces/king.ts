@@ -118,7 +118,8 @@ export class King extends Piece {
     if (!this.canDoMove(move)) throw Error("Cannot do this move!");
     if (move instanceof NormalMove) {
       this.getBoard().removePiece(move.getTo());
-      this.coordinates = move.getTo();
+      this.coordinates = move.getTo().clone();
+      this.hasMoved = true;
     }
     if (move instanceof CastlingMove) {
       const kingCoordinates = NormalCoordinates.fromCoordinates(move.getKing());
@@ -138,6 +139,7 @@ export class King extends Piece {
 
       rook.moveTo(newRookCoordinates);
       this.coordinates = newKingCoordinates;
+      this.hasMoved = true;
     }
   }
 
@@ -190,7 +192,7 @@ export class King extends Piece {
 
   _toJSON(): {
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   } {
     return { hasMoved: this.hasMoved };
   }

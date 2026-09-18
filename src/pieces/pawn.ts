@@ -1,6 +1,8 @@
 import { Board } from "../board/board";
 import {
   Coordinates,
+  getDistanceSquared,
+  getDistanceVector,
   NormalCoordinates,
   RelativeCoordinates,
 } from "../coordinates/coordinates";
@@ -46,6 +48,11 @@ export class PseudoPawn extends Piece {
       this.piece.getCoordinates(),
     ).clone();
     if (move instanceof PawnReachesEndMove) {
+      if (
+        move.getNewPiece() == PieceType.PAWN ||
+        move.getNewPiece() == PieceType.KING
+      )
+        throw Error("New Piece cannot be a Pawn or a King!");
       this.piece = createPiece(
         this.coordinates,
         this.getPlayer(),
@@ -80,9 +87,25 @@ export class PseudoPawn extends Piece {
 
   _toJSON(): {
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   } {
     return this.piece._toJSON();
+  }
+
+  public enPasseIsPossible(): boolean {
+    if (!(this.piece instanceof Pawn)) return false;
+    return this.piece.enPasseIsPossible();
+  }
+
+  /**
+   * Written by Claude!
+   *
+   * Closes this pawn's en passant window. Called by the board once the
+   * opponent has had their reply, so the flag cannot outlive the one move
+   * during which the capture is legal. A no-op once the pawn has promoted.
+   */
+  public clearEnPassePossible(): void {
+    if (this.piece instanceof Pawn) this.piece.clearEnPassePossible();
   }
 }
 
@@ -152,14 +175,14 @@ class Pawn extends Piece {
     if (
       Math.abs(deltaDistance.deltaColumn) == 1 &&
       pieceTaken == null &&
-      (!(pieceTakenByEnPasse instanceof Pawn) ||
+      (!(pieceTakenByEnPasse instanceof PseudoPawn) ||
         !pieceTakenByEnPasse.enPasseIsPossible())
     )
       return false;
 
     if (
       move instanceof PawnReachesEndMove &&
-      move.getNewPiece() in [PieceType.PAWN, PieceType.KING]
+      [PieceType.PAWN, PieceType.KING].includes(move.getNewPiece())
     )
       return false;
     if (move instanceof PawnReachesEndMove && relativeFrom.getRow() != 7)
@@ -171,18 +194,36 @@ class Pawn extends Piece {
     return this.enPassePossible;
   }
 
+  /**
+   * Written by Claude!
+   *
+   * Closes this pawn's en passant window. A pawn cannot tell how many turns
+   * have passed since it double-stepped, so the board drives this.
+   */
+  public clearEnPassePossible(): void {
+    this.enPassePossible = false;
+  }
+
   public doMove(move: Move): void {
     if (!this.canDoMove(move)) throw Error("Cannot do the move!");
     if (move instanceof NormalMove || move instanceof PawnReachesEndMove) {
-      this.getBoard().removePiece(move.getTo());
-      this.coordinates = move.getTo().clone();
       if (
-        RelativeCoordinates.fromCoordinates(
-          move.getFrom(),
-          this.getPlayer(),
-        ).getRow() == 2
-      )
-        this.enPassePossible = true;
+        getDistanceVector(move.getFrom(), move.getTo()).deltaColumn !== 0 &&
+        this.getBoard().getPiece(move.getTo()) == null
+      ) {
+        this.getBoard().removePiece(
+          new NormalCoordinates(
+            move.getFrom().toNormal().getRow(),
+            move.getTo().toNormal().getColumn(),
+          ),
+        );
+      }
+      this.getBoard().removePiece(move.getTo());
+
+      this.coordinates = move.getTo().clone();
+
+      this.enPassePossible =
+        getDistanceSquared(move.getFrom(), move.getTo()) == 4;
     }
   }
 
@@ -243,8 +284,8 @@ class Pawn extends Piece {
 
   _toJSON(): {
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   } {
-    return { enPassePossible: this.enPasseIsPossible() };
+    return { enPasseIsPossible: this.enPasseIsPossible() };
   }
 }

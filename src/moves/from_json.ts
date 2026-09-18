@@ -1,5 +1,5 @@
 import { Coordinates, LetterCoordinates } from "../coordinates/coordinates";
-import { getPieceTypeFromName } from "../pieces/piece";
+import { getPieceTypeFromName, Piece, PieceType } from "../pieces/piece";
 import { CastlingMove } from "./castling_move";
 import { NormalMove } from "./normal_move";
 import { PawnReachesEndMove } from "./pawn_reaches_end_move";
@@ -46,6 +46,8 @@ export function moveFromJSON(
         };
       const newPiece = getPieceTypeFromName(_newPiece);
       if (newPiece === null) return { error: `Wrong piece name ${_newPiece}!` };
+      if (newPiece === PieceType.PAWN || newPiece === PieceType.KING)
+        return { error: "New Piece cannot be a pawn or a king!" };
       if (!(from instanceof Coordinates)) return { error: from };
       if (!(to instanceof Coordinates)) return { error: to };
       return new PawnReachesEndMove(from, to, newPiece);
