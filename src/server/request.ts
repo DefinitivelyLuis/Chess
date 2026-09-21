@@ -56,6 +56,8 @@ function handleMoveRequest(
 
   if (!("password" in json)) return { error: "Password is undefined!" };
   if (!("move" in json)) return { error: "Move is undefined!" };
+  if (typeof json.move !== "object" || json.move === null)
+    return { error: "Move is malformed!" };
 
   if (json.password === password.passwordWhite) {
     player = PlayerType.WHITE;

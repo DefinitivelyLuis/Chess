@@ -10,7 +10,7 @@
 
 The Chess Server is an HTTP API for managing a chess game. All requests are POST requests with JSON bodies. The server maintains a single shared board state that persists across requests (the *client* is stateless, the server is not).
 
-> All standard chess rules are implemented and covered by tests. One error-reporting gap and one deliberate rule deviation remain — see [Known Limitations](#known-limitations) and [Intentional Deviations](#intentional-deviations-from-standard-chess).
+> All standard chess rules are implemented and covered by tests, with one deliberate deviation — see [Intentional Deviations](#intentional-deviations-from-standard-chess).
 
 ### Authentication
 
@@ -222,7 +222,8 @@ Coordinates are in algebraic notation (e.g., `"E2"`, `"A8"`):
 | `"Only the active player can do a move!"`   | Wrong player's turn (check `activePlayer` in GET_BOARD)     |
 | `"Wrong password!"`                         | Invalid password for this player                            |
 | `"Password is undefined!"`                  | Missing `password` field                                    |
-| `"Move is undefined!"`                      | Missing or malformed `move` object                          |
+| `"Move is undefined!"`                      | Missing `move` field                                        |
+| `"Move is malformed!"`                      | `move` is present but not an object                         |
 | `"Cannot do the move!"`                     | Move violates chess rules (illegal, moves into check, etc.) |
 | `"Could not parse the json!"`               | Request JSON is malformed                                   |
 | `"Wrong piece name X!"`                     | `newPiece` is not a known piece type                        |
@@ -394,25 +395,17 @@ See [Known Limitations](#known-limitations) for the remaining gap.
 
 ## Known Limitations
 
-Each item below is pinned by an executable `knownBug()` case in `tests/`. Run
-`npx tsx tests/run.ts` and `npx tsx tests/run_server.ts` for the live list.
+None currently known.
 
-### A non-object `move` returns an internal error
+Every defect found so far has been fixed and pinned by a test. Known defects
+are tracked as executable `knownBug()` cases rather than prose — run
+`npx tsx tests/run.ts` and `npx tsx tests/run_server.ts` for the live list,
+which is empty as of this writing.
 
-`MOVE` checks that the `move` field is *present* but not that it is an object,
-so a primitive slips through to the move parser and throws:
-
-```json
-{ "type": "MOVE", "password": "5678", "move": "not an object" }
-```
-
-replies with `Internal Server Error TypeError: Cannot use 'in' operator...`
-and no `type` field, instead of a validation error. The same applies to
-`"move": 42` and `"move": null`.
-
-Well-formed objects with bad *contents* are all handled correctly — unknown
-move types, missing `from`/`to`, off-board coordinates and invalid promotion
-pieces each return a clear message.
+Malformed requests are reported rather than thrown: a `move` that is not an
+object, an unknown move type, missing `from`/`to`, off-board coordinates and
+invalid promotion pieces each return a clear validation error with the `type`
+field intact.
 
 ---
 
@@ -606,11 +599,10 @@ The server guarantees:
 - ✅ En passant, including victim removal and window expiry
 - ✅ That every `POSSIBLE_MOVES` entry is a legal move
 - ✅ That `hasMoved` and `enPasseIsPossible` survive a `GET_BOARD` → `POSSIBLE_MOVES` round-trip
+- ✅ That a malformed request is reported as a validation error, not a throw
 
 The server does NOT guarantee:
 
-- ❌ A clean validation error when `move` is not an object — see
-  [Known Limitations](#known-limitations)
 - ❌ The standard 50-move rule — pawn moves do not reset the counter, by design
   (see [Intentional Deviations](#intentional-deviations-from-standard-chess))
 - ❌ HTTPS encryption

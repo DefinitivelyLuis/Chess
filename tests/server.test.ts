@@ -335,12 +335,10 @@ suite("server: robustness", () => {
     equal(offenders.length, 0, `requests that escaped as a throw:${offenders.join("")}`);
   });
 
-  // handleMoveRequest checks that `move` is PRESENT but not that it is an
-  // object, then casts it to Record<string, unknown>. moveFromJSON's first act
-  // is `"type" in json`, and `in` throws on a primitive.
-  // handlePossibleMovesRequest already guards its `board` this way; `move`
-  // needs the same check.
-  knownBug("a non-object `move` is reported, not thrown", async () => {
+  // `move` is cast to Record<string, unknown> and handed to moveFromJSON,
+  // whose first act is `"type" in json` - and `in` throws on a primitive. The
+  // guard must also reject null, since `typeof null === "object"`.
+  test("a non-object `move` is reported, not thrown", async () => {
     const password = await activePassword();
     const offenders = await escapedAsThrow([
       { type: "MOVE", password, move: "not an object" },

@@ -62,14 +62,9 @@ in a stale prose checklist.
 
 ## Open bugs these tests pin down
 
-Run the suites for the current list. As of the last run: none in `run.ts`, 1 in
-`run_server.ts`.
+None — every defect found so far is fixed and pinned by a `test()`.
 
-- **A non-object `move` escapes as `Internal Server Error`.**
-  `handleMoveRequest` checks that `move` is present but not that it is an
-  object, then casts it and hands it to `moveFromJSON`, whose first act is
-  `"type" in json` — and `in` throws on a primitive. `handlePossibleMovesRequest`
-  already guards its `board` this way; `move` needs the same check.
+New ones go here as `knownBug()` cases; run the suites for the live list.
 
 ## Intentional deviations
 
