@@ -7,6 +7,7 @@ import {
 import { Piece } from "./piece_interface";
 import { createPiece } from "./utils";
 import { King } from "./king";
+import { PseudoPawn } from "./pawn";
 
 export {
   getOtherPlayer,
@@ -15,5 +16,6 @@ export {
   Piece,
   createPiece,
   King,
+  PseudoPawn,
   getPieceTypeFromName,
 };

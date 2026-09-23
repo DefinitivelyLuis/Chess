@@ -61,7 +61,7 @@ export abstract class Piece {
     player: PlayerType;
     type: PieceType;
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   } {
     return {
       ...this._toJSON(),
@@ -75,6 +75,6 @@ export abstract class Piece {
 
   abstract _toJSON(): {
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   };
 }

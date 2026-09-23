@@ -1,6 +1,7 @@
 import { Board } from "../board/board";
 import {
   Coordinates,
+  equals,
   getDistanceVector,
   NormalCoordinates,
 } from "../coordinates/coordinates";
@@ -23,6 +24,9 @@ export class Rook extends Piece {
 
   public canDoMove(move: Move): boolean {
     if (!(move instanceof NormalMove)) return false;
+    if (!equals(move.getFrom(), this.getCoordinates())) {
+      throw Error("Error: getFrom() and getCoordinates() should be equal!");
+    }
     const deltaVector = getDistanceVector(move.getFrom(), move.getTo());
     if (deltaVector.deltaColumn != 0 && deltaVector.deltaRow != 0) return false;
     if (deltaVector.deltaColumn == 0 && deltaVector.deltaRow == 0) return false;
@@ -65,6 +69,7 @@ export class Rook extends Piece {
 
   public moveTo(coordinates: Coordinates): void {
     this.coordinates = coordinates.clone();
+    this.hasMoved_ = true;
   }
 
   public doMove(move: Move): void {
@@ -72,6 +77,7 @@ export class Rook extends Piece {
     if (move instanceof NormalMove) {
       this.getBoard().removePiece(move.getTo());
       this.coordinates = move.getTo().clone();
+      this.hasMoved_ = true;
     }
   }
 
@@ -94,7 +100,7 @@ export class Rook extends Piece {
 
   _toJSON(): {
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   } {
     return { hasMoved: this.hasMoved() };
   }

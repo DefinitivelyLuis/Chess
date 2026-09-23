@@ -8,7 +8,9 @@
 
 ## Overview
 
-The Chess Server is a stateless HTTP API for managing chess games. All requests are POST requests with JSON bodies. The server maintains a single shared board state that persists across requests.
+The Chess Server is an HTTP API for managing a chess game. All requests are POST requests with JSON bodies. The server maintains a single shared board state that persists across requests (the *client* is stateless, the server is not).
+
+> All standard chess rules are implemented and covered by tests, with one deliberate deviation — see [Intentional Deviations](#intentional-deviations-from-standard-chess).
 
 ### Authentication
 
@@ -101,12 +103,12 @@ After parsing the envelope, the `response` object contains:
 
 The response contains a `board` object with the following fields:
 
-| Field                       | Type    | Description                                                       |
-| --------------------------- | ------- | ----------------------------------------------------------------- |
-| `board.pieces`              | Array   | Array of piece objects currently on the board                     |
-| `board.activePlayer`        | String  | Current player's turn: `"WHITE"` or `"BLACK"`                     |
-| `board.gameIsOver`          | Boolean | Whether the game has ended (checkmate/stalemate)                  |
-| `board.timeSincePieceTaken` | Number  | Number of moves since last piece capture (resets to 0 on capture) |
+| Field                       | Type    | Description                                                                                                  |
+| --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `board.pieces`              | Array   | Array of piece objects currently on the board                                                                |
+| `board.activePlayer`        | String  | Current player's turn: `"WHITE"` or `"BLACK"`                                                                |
+| `board.gameIsOver`          | Boolean | `true` on checkmate, stalemate, bare kings, or 100 half-moves without a capture                               |
+| `board.timeSincePieceTaken` | Number  | Half-moves since the last capture. `0` right after a capture. Pawn moves deliberately do **not** reset it — see [Intentional Deviations](#intentional-deviations-from-standard-chess) |
 
 #### Piece Object Fields
 
@@ -115,8 +117,8 @@ The response contains a `board` object with the following fields:
 | `coordinates`     | String  | Algebraic notation (`"A1"` - `"H8"`)                                      |
 | `player`          | String  | `"WHITE"` or `"BLACK"`                                                    |
 | `type`            | String  | `"PAWN"`, `"KNIGHT"`, `"BISHOP"`, `"ROOK"`, `"QUEEN"`, `"KING"`           |
-| `hasMoved`        | Boolean | Whether piece has moved from starting position (for castling eligibility) |
-| `enPassePossible` | Boolean | Whether pawn can be captured en passant                                   |
+| `hasMoved`        | Boolean | Kings and rooks only. Set once the piece moves; drives castling eligibility |
+| `enPasseIsPossible` | Boolean | Pawns only. `true` only for a pawn that just double-stepped, and only until the opponent replies |
 
 ---
 
@@ -124,7 +126,7 @@ The response contains a `board` object with the following fields:
 
 **Execute a move on the board.**
 
-#### Request - Normal Move (Also used by En Passe)
+#### Request - Normal Move (also used for en passant)
 
 ```json
 {
@@ -187,6 +189,16 @@ The response contains a `board` object with the following fields:
 
 **Note:** Check for the `error` field to distinguish between success and failure responses.
 
+An unhandled exception produces a different shape — the `type` field is **absent** and the message is prefixed with `Internal Server Error`:
+
+```json
+{
+  "error": "Internal Server Error TypeError: ..."
+}
+```
+
+Treat a missing `type` or an `Internal Server Error` prefix as a server bug, not as a rejected move.
+
 #### Move Types
 
 | Type                    | Description                         | Required Fields          |
@@ -210,9 +222,12 @@ Coordinates are in algebraic notation (e.g., `"E2"`, `"A8"`):
 | `"Only the active player can do a move!"`   | Wrong player's turn (check `activePlayer` in GET_BOARD)     |
 | `"Wrong password!"`                         | Invalid password for this player                            |
 | `"Password is undefined!"`                  | Missing `password` field                                    |
-| `"Move is undefined!"`                      | Missing or malformed `move` object                          |
+| `"Move is undefined!"`                      | Missing `move` field                                        |
+| `"Move is malformed!"`                      | `move` is present but not an object                         |
 | `"Cannot do the move!"`                     | Move violates chess rules (illegal, moves into check, etc.) |
 | `"Could not parse the json!"`               | Request JSON is malformed                                   |
+| `"Wrong piece name X!"`                     | `newPiece` is not a known piece type                        |
+| `"New Piece cannot be a pawn or a king!"`   | Promotion target must be queen, rook, bishop or knight      |
 | `"The json must contain the type field..."` | Missing or invalid `type` field in request                  |
 
 ---
@@ -220,6 +235,8 @@ Coordinates are in algebraic notation (e.g., `"E2"`, `"A8"`):
 ### 3. POSSIBLE_MOVES
 
 **Get all legal moves for a given board position (for analysis/AI).**
+
+> Moves that would leave your own king attacked are filtered out, so this agrees with what `MOVE` accepts. Unlike `MOVE`, this endpoint is read-only and evaluates whatever position you send, not the server's board. It also tolerates positions without kings, which a real game never has.
 
 #### Request
 
@@ -261,17 +278,17 @@ Coordinates are in algebraic notation (e.g., `"E2"`, `"A8"`):
 
 #### Use Case
 
-This endpoint is primarily for analysis, move validation, and AI engines. To play a game, use GET_BOARD and MOVE.
+This endpoint is primarily for analysis and AI engines. To play a game, use GET_BOARD and MOVE. An empty `possibleMoves` array means the side to move has no legal move — combine it with `gameIsOver` from GET_BOARD to tell checkmate from stalemate.
 
 #### Board Format for POSSIBLE_MOVES
 
 The `board` parameter is an object containing:
 
-- `pieces` array: Piece array from GET_BOARD response (each piece has `coordinates`, `player`, `type`, optional `hasMoved`, optional `enPassePossible`)
+- `pieces` array: Piece array from GET_BOARD response (each piece has `coordinates`, `player`, `type`, optional `hasMoved`, optional `enPasseIsPossible`)
 - `timeSincePieceTaken` number: From GET_BOARD response
 - `activePlayer` string: Player's turn ("WHITE" or "BLACK")
 
-**Convenience:** You can pass the entire `board` object from a GET_BOARD response directly to POSSIBLE_MOVES—the extra `gameIsOver` field is automatically ignored:
+**Convenience:** You can pass the entire `board` object from a GET_BOARD response directly to POSSIBLE_MOVES—the extra `gameIsOver` field is automatically ignored.
 
 ```javascript
 // Simple pass-through usage
@@ -346,27 +363,73 @@ const moves = await getPossibleMoves(boardResp.board, boardResp.board.activePlay
 
 ## Chess Rules Implemented
 
-✅ **Piece Movements**
+✅ **Piece Movements** — all verified by `tests/pieces.test.ts`
 
 - Pawn: Forward 1 or 2 squares (from start), captures diagonally
-- Knight: L-shaped (2+1 squares)
-- Bishop: Diagonal any distance
-- Rook: Horizontal/vertical any distance
+- Knight: L-shaped (2+1 squares), jumps over pieces
+- Bishop: Diagonal any distance, blocked by pieces
+- Rook: Horizontal/vertical any distance, blocked by pieces
 - Queen: Combination of bishop and rook
-- King: One square in any direction
-
-✅ **Special Moves**
-
-- Castling: King and rook move simultaneously (kingside/queenside)
-- En Passant: Capture opponent's pawn that advanced 2 squares
-- Pawn Promotion: Pawn becomes queen/rook/bishop/knight at end of board
+- King: One square in any direction, may not approach the enemy king
 
 ✅ **Game Rules**
 
+- Standard starting position
 - Turn alternation enforced by password
-- Move validation (can't move into check, etc.)
-- Check/checkmate/stalemate detection
-- Piece capture tracking (`timeSincePieceTaken`)
+- Captures remove the captured piece
+- A move that leaves your own king attacked is rejected
+- A king may not move into an attacked square
+- **Check**, for either player, whether or not it is their turn
+- **Checkmate** — `gameIsOver` becomes `true` and the mated side `hasLost`
+- **Stalemate** — reported as a draw, not as a loss
+- **Castling**, including path checks, attacked-square checks, and loss of
+  castling rights once the king or rook moves
+- **Pawn promotion** to queen, rook, bishop or knight
+- **En passant**, including removal of the captured pawn and expiry of the
+  capture window after a single reply
+- Draw when only the two kings remain, or after 100 half-moves without a capture
+
+See [Known Limitations](#known-limitations) for the remaining gap.
+
+---
+
+## Known Limitations
+
+None currently known.
+
+Every defect found so far has been fixed and pinned by a test. Known defects
+are tracked as executable `knownBug()` cases rather than prose — run
+`npx tsx tests/run.ts` and `npx tsx tests/run_server.ts` for the live list,
+which is empty as of this writing.
+
+Malformed requests are reported rather than thrown: a `move` that is not an
+object, an unknown move type, missing `from`/`to`, off-board coordinates and
+invalid promotion pieces each return a clear validation error with the `type`
+field intact.
+
+---
+
+## Intentional Deviations from Standard Chess
+
+These are **deliberate design decisions, not bugs.** They will not be "fixed" —
+if you change the behaviour, update this section first.
+
+### The draw counter only counts captures
+
+`timeSincePieceTaken` counts half-moves since the last **capture**, and a draw
+is declared at 100 (50 moves per side).
+
+Under the standard 50-move rule a pawn move *also* resets the counter, because
+pawns cannot move backwards and so a pawn move marks irreversible progress.
+This server ignores that: **a pawn move does not reset `timeSincePieceTaken`.**
+
+**Client impact:** a long pawn-only sequence counts towards the draw threshold
+here where a standard engine would have reset it. Games can therefore be
+declared drawn slightly earlier than under strict FIDE rules. If you need the
+standard rule, track pawn moves yourself on the client.
+
+This is pinned by the test `a pawn move does not reset the draw counter
+(accepted deviation)` in `tests/board.test.ts`.
 
 ---
 
@@ -527,21 +590,42 @@ async function getPossibleMoves(boardState, activePlayer) {
 The server guarantees:
 
 - ✅ Consistent board state across all clients
-- ✅ Move validation against all chess rules
 - ✅ Proper turn enforcement via password
-- ✅ Accurate piece tracking
-- ✅ Game state detection (checkmate/stalemate)
+- ✅ Accurate piece positions and capture handling
+- ✅ Correct movement geometry for all six piece types
+- ✅ Rejection of moves that leave your own king attacked
+- ✅ Checkmate, stalemate and draw detection via `gameIsOver`
+- ✅ Castling rules, including loss of castling rights
+- ✅ En passant, including victim removal and window expiry
+- ✅ That every `POSSIBLE_MOVES` entry is a legal move
+- ✅ That `hasMoved` and `enPasseIsPossible` survive a `GET_BOARD` → `POSSIBLE_MOVES` round-trip
+- ✅ That a malformed request is reported as a validation error, not a throw
 
 The server does NOT guarantee:
 
+- ❌ The standard 50-move rule — pawn moves do not reset the counter, by design
+  (see [Intentional Deviations](#intentional-deviations-from-standard-chess))
 - ❌ HTTPS encryption
 - ❌ Authentication beyond password
 - ❌ Persistence across server restarts
-- ❌ Multi-game isolation (single shared board)
+- ❌ Multi-game isolation (single shared board, no reset endpoint)
 - ❌ Real-time push notifications
 
 ---
 
-**Last Updated:** September 8, 2026  
+## Testing
+
+```bash
+npx tsx tests/run.ts          # rules and piece geometry, in-process
+npx tsx tests/run_server.ts   # HTTP integration, spawns and stops the server
+```
+
+Both exit non-zero on failure. Known defects are encoded as `knownBug()` cases
+that report without failing the run, and flip the run to a failure if they
+start passing. See `tests/README.md`.
+
+---
+
+**Last Updated:** September 18, 2026  
 **API Version:** 1.0  
-**Status:** Stable
+**Status:** Complete rules engine; see [Known Limitations](#known-limitations) and [Intentional Deviations](#intentional-deviations-from-standard-chess)

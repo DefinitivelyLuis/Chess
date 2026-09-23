@@ -28,14 +28,10 @@ function getBoolean(
   name: string,
 ): boolean | undefined {
   if (!(name in json)) return undefined;
-  switch (json[name]) {
-    case "TRUE":
-      return true;
-    case "FALSE":
-      return false;
-    default:
-      return undefined;
-  }
+  if (typeof json[name] === "boolean") return json[name];
+  if (json[name] === "TRUE") return true;
+  if (json[name] === "FALSE") return false;
+  return undefined;
 }
 
 function getRequestJSON(
@@ -60,6 +56,8 @@ function handleMoveRequest(
 
   if (!("password" in json)) return { error: "Password is undefined!" };
   if (!("move" in json)) return { error: "Move is undefined!" };
+  if (typeof json.move !== "object" || json.move === null)
+    return { error: "Move is malformed!" };
 
   if (json.password === password.passwordWhite) {
     player = PlayerType.WHITE;
@@ -106,7 +104,10 @@ function handlePossibleMovesRequest(json: Record<string, unknown>): {
     const player = getPlayerType(_piece, "player");
 
     if (typeof coordinates === "string") return { error: coordinates };
-    if (typeof player === "string" && !Object.values(PlayerType).includes(player as PlayerType)) {
+    if (
+      typeof player === "string" &&
+      !Object.values(PlayerType).includes(player as PlayerType)
+    ) {
       return { error: player };
     }
 
@@ -128,12 +129,19 @@ function handlePossibleMovesRequest(json: Record<string, unknown>): {
   }
 
   const activePlayer = getPlayerType(board, "activePlayer");
-  if (typeof activePlayer === "string" && !Object.values(PlayerType).includes(activePlayer as PlayerType)) {
+  if (
+    typeof activePlayer === "string" &&
+    !Object.values(PlayerType).includes(activePlayer as PlayerType)
+  ) {
     return { error: activePlayer };
   }
 
   return {
-    possibleMoves: new Board(pieces, activePlayer as PlayerType, board.timeSincePieceTaken)
+    possibleMoves: new Board(
+      pieces,
+      activePlayer as PlayerType,
+      board.timeSincePieceTaken,
+    )
       .getPossibleMoves()
       .map((move) => move.toJson()),
   };
@@ -197,7 +205,6 @@ function _handleRequest(
     response = handlePossibleMovesRequest(json);
   } else if (type == "GET_BOARD") {
     response = handleGetBoardRequest(board);
-    console.log("DEBUG GET_BOARD response keys:", Object.keys(response));
   } else {
     return {
       error:

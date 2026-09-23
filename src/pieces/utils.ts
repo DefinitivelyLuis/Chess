@@ -1,9 +1,9 @@
 import { Board } from "../board/board";
 import { Coordinates } from "../coordinates/coordinates";
-import { Bishop } from "./bishop";
+import { Knight } from "./knight";
 import { PieceType, PlayerType } from "./definitions";
 import { King } from "./king";
-import { Knight } from "./knight";
+import { Bishop } from "./bishop";
 import { PseudoPawn } from "./pawn";
 import { Piece } from "./piece_interface";
 import { Queen } from "./queen";

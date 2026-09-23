@@ -1,5 +1,5 @@
 import { Move, NormalMove } from "../moves/move";
-import { Knight } from "./knight";
+import { Bishop } from "./bishop";
 import { Rook } from "./rook";
 import { Piece } from "./piece_interface";
 import { PieceType } from "./definitions";
@@ -7,7 +7,7 @@ import { PieceType } from "./definitions";
 export class Queen extends Piece {
   public canDoMove(move: Move): boolean {
     if (
-      new Knight(
+      new Bishop(
         this.getCoordinates(),
         this.getPlayer(),
         this.getBoard(),
@@ -43,12 +43,16 @@ export class Queen extends Piece {
   }
 
   public clone(): Piece {
-    return new Queen(this.coordinates, this.getPlayer(), this.getBoard());
+    return new Queen(
+      this.getCoordinates().clone(),
+      this.getPlayer(),
+      this.getBoard(),
+    );
   }
 
   _toJSON(): {
     hasMoved?: boolean;
-    enPassePossible?: boolean;
+    enPasseIsPossible?: boolean;
   } {
     return {};
   }
